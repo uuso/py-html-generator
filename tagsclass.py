@@ -1,10 +1,21 @@
 class Tag:
+    """
+    Класс реализует возможность создавать HTML-тэги в Python. 
+    Класс Tag(tag(str), klass(str or tuple or list), is_single(bool), <tag-properties as **kwargs>) --
+        позволяет работать с любым тэгом, задавать ему .text, аргументы, вложенные тэги.
+    Добавление вложенного тега организовано перегрузкой оператора '+=' (__iadd__).
+    Поддерживается работа с контекстным менеджером, приведение экземпляра к str.
+    Метод .get_lines(indent, set_offset) вернёт список из строк тега с учётом отступов во вложенных тэгах:
+        - аргумент indent(str) отвечает за формат отступов вложенных элементов, 
+        - аргумент set_offset(int) даст отступы формата indent(str) самому тэгу -- для случая необходимости вставки его указанное место файла.
+    """
     def __init__(self, tag, klass = (), is_single = False, **kwargs):
         self.tag = tag
         self.attributes = {}
         self.is_single = is_single
         self.children = []
         self.text = ""
+        self.indent = 4*' '
 
         if klass: # Если что-либо указали в аргументе klass
             if type(klass) is tuple or type(klass) is list: # Опишем, если несколько классов для тега
@@ -29,74 +40,86 @@ class Tag:
         return self
 
     def __str__(self):
-        # переписал __str__ с учётом нового метода Tag.lines()
-        return '\n'.join(self.lines())
+        # переписал __str__ с учётом нового метода Tag.get_lines()
+        return '\n'.join(self.get_lines())
 
-    def lines(self, indent = '  '):
+    def get_lines(self, indent = None, set_offset = 0):
+        if indent is None:
+            indent = self.indent
+
         attrs = []
         for attr, value in self.attributes.items():
             attrs.append('%s="%s"' % (attr, value))
         attrs = ' '.join(attrs)
 
         if self.is_single: # одиночный тег не содержит вложенных тегов и внутреннего текста, поэтому отображается одной строкой
-            return [f'<{self.tag}{" " + attrs if attrs else ""}/>'] # Конструкция {" " if attrs else ""} заберёт пробел в случае отсутствия аргументов        
+            return [f'{set_offset*indent}<{self.tag}{" " + attrs if attrs else ""}/>'] # Конструкция {" " if attrs else ""} заберёт пробел в случае отсутствия аргументов        
         
         # обработчик двойных тегов
         lines = []
-        lines.append(f'<{self.tag}{" " + attrs if attrs else ""}>') # добавим строку открывающего тега с его свойствами
+        lines.append(f'{set_offset*indent}<{self.tag}{" " + attrs if attrs else ""}>') # добавим строку открывающего тега с его свойствами
         if self.text:
-            lines.append(indent + self.text)
+            lines.append( (set_offset*indent) + indent + self.text )
         
         # каждой строке внутреннего тега добавим отступ
         # осторожно, рекурсия!
         for inner in self.children: # для каждого потомка ...
-            lines += [indent + line for line in inner.lines(indent)] # каждая его строка склеивается с отступом и весь его список строк добавляем в наш текущий
+            lines += [ (set_offset*indent) + indent + line for line in inner.get_lines(indent)] # каждая его строка склеивается с отступом и весь его список строк добавляем в наш текущий
         
-        lines.append(f'</{self.tag}>') # добавим строку с закрывающии тегом
+        lines.append(f'{set_offset*indent}</{self.tag}>') # добавим строку с закрывающии тегом
 
         return lines
         
 
 class TopLevelTag(Tag):
+    """
+    Класс для добавления тегов верхнего уровня, например, <body>, <head>.
+    Создан скорее для визуального отделения обычных тегов от верхних. Является всегда парным.
+    """
     def __init__(self, tag, **kwargs):
         super().__init__(tag, **kwargs) # задействуем конструктор наследуемого класса super().__init__
 
 class HTML(Tag):
-    def __init__(self, output=None):
-        self.output = output
+    """
+    Класс реализует обёртку для тегов TopLevelTag(), Tag() -- html. 
+    Вернёт файл, если указать путь в out_filepath(str), иначе - выведет на экран.
+    Поддерживается контекст. При выходе из контекста автоматически вызовется .flush().
+    Для записи содержимого в файл / вывода на экран  -- вызвать метод .flush().
+    """
+    def __init__(self, out_filepath=None):
+        self.output = out_filepath
         super().__init__(tag = 'html')
     
     def __exit__(self, *args, **kwargs):
+        self.flush()
+    
+    def flush(self): # функция принудительного вывода на экран / в файл -- использовать при работе без контекста with
         if not type(self.output) is str:
             print(self)
         else:
             with open(self.output, mode='w', encoding='UTF-8') as fp:                
-                for line in self.lines():
-                    fp.write(line + '\n')
-    
-    def flush(self): # функция принудительного вывода на экран / в файл -- использовать при работе без контекста with
-        self.__exit__(self)
+                fp.write('\n'.join(self.get_lines(indent = self.indent)))
         
 
 
 
 
-if __name__ == '__main__':
-    doc = HTML('out.txt')
-    with TopLevelTag('body') as body:
-        with Tag('div', klass='container') as my_div:
-            my_div.text = 'Lorem ipsum'
-            with Tag('img', klass=('my_image', "photo"), is_single=True, src = '/img/photo1.png', alt="It's me", un_der = "true") as my_img:
-                my_div += my_img
-            with Tag('div', klass=('row', 'no-gutters')) as row:
-                with Tag('div', klass=('col', 'col-3-sm')) as col:
-                    row += col
-                my_div += row            
-            body += my_div
-        doc += body
+# if __name__ == '__main__':
+#     doc = HTML('out.txt')
+#     with TopLevelTag('body') as body:
+#         with Tag('div', klass='container') as my_div:
+#             my_div.text = 'Lorem ipsum'
+#             with Tag('img', klass=('my_image', "photo"), is_single=True, src = '/img/photo1.png', alt="It's me", un_der = "true") as my_img:
+#                 my_div += my_img
+#             with Tag('div', klass=('row', 'no-gutters')) as row:
+#                 # with Tag('div', klass=('col', 'col-3-sm')) as col:
+#                 #     row += col
+#                 my_div += row            
+#             body += my_div
+#         doc += body
     
-    doc.flush()
-    print(doc)
+#     doc.flush()
+#     print(doc)
 
 
 
@@ -104,30 +127,32 @@ if __name__ == '__main__':
 # Из примера:
 
 
-# if __name__ == "__main__":
-#     with HTML(output=None) as doc:
-#         with TopLevelTag("head") as head:
-#             with Tag("title") as title:
-#                 title.text = "hello"
-#                 head += title
-#             doc += head
+if __name__ == "__main__":
+    with HTML(out_filepath=None) as doc:
+        # doc.indent = '--'
+        with TopLevelTag("head") as head:
+            with Tag("title") as title:
+                title.text = "hello"
+                head += title
+            doc += head
 
-#         with TopLevelTag("body") as body:
-#             with Tag("h1", klass=("main-text",)) as h1:
-#                 h1.text = "Test"
-#                 body += h1
+        with TopLevelTag("body") as body:
+            with Tag("h1", klass=("main-text",)) as h1:
+                h1.text = "Test"
+                body += h1
+            # body.indent = '%%'
+            with Tag("div", klass=("container", "container-fluid"), id="lead") as div:
+                with Tag("p") as paragraph:
+                    paragraph.text = "another test"
+                    div += paragraph
 
-#             with Tag("div", klass=("container", "container-fluid"), id="lead") as div:
-#                 with Tag("p") as paragraph:
-#                     paragraph.text = "another test"
-#                     div += paragraph
+                with Tag("img", is_single=True, src="/icon.png") as img:
+                    div += img
 
-#                 with Tag("img", is_single=True, src="/icon.png") as img:
-#                     div += img
-
-#                 body += div
-
-#             doc += body
+                body += div
+            # for _ in body.get_lines(set_offset=4):
+                # print(_)
+            doc += body
 
 
 
