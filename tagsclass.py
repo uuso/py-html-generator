@@ -64,17 +64,19 @@ class Tag:
                     
         # обработчик двойных тегов
         lines = []
-        lines.append(f'{set_offset*indent}<{self.tag}{" " + attrs if attrs else ""}>') # добавим строку открывающего тега с его свойствами
+        lines.append(f'<{self.tag}{" " + attrs if attrs else ""}>') # добавим строку открывающего тега с его свойствами
         if self.text:
-            lines.append( (set_offset*indent) + indent + self.text )
+            lines.append(indent + self.text )
         
         # каждой строке внутреннего тега добавим отступ
         # осторожно, рекурсия!
         for inner in self.children: # для каждого потомка ...
-            lines += [ (set_offset*indent) + indent + line for line in inner.get_lines(indent)] # каждая его строка склеивается с отступом и весь его список строк добавляем в наш текущий
+            lines += [indent + line for line in inner.get_lines(indent)] # каждая его строка склеивается с отступом и весь его список строк добавляем в наш текущий
         
-        lines.append(f'{set_offset*indent}</{self.tag}>') # добавим строку с закрывающии тегом
-
+        lines.append(f'</{self.tag}>') # добавим строку с закрывающии тегом
+        
+        if set_offset:
+            return [(set_offset*indent) + line for line in lines]
         return lines
         
 
