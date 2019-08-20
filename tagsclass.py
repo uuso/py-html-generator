@@ -15,7 +15,7 @@ class Tag:
         self.is_single = is_single
         self.children = []
         self.text = ""
-        self.indent = 4*' '
+        self.indent = 4*' ' # Для вывода дочерних элементов по-умолчанию используется четыре пробела
 
         if klass: # Если что-либо указали в аргументе klass
             if type(klass) is tuple or type(klass) is list: # Опишем, если несколько классов для тега
@@ -43,8 +43,14 @@ class Tag:
         # переписал __str__ с учётом нового метода Tag.get_lines()
         return '\n'.join(self.get_lines())
 
-    def get_lines(self, indent = None, set_offset = 0):
-        if indent is None:
+    def get_lines(self, indent = None, set_offset = 0): 
+        """
+        Метод вернёт текущий тэг со всем его содержимым в виде списка строк, что удобно для будущего добавления отступов.
+        indent -- оступы для внутрненних элементов. 
+        set_offset -- сдвиг элемента на set_offset отступов. Сделана с заделом на будущее использование класса и вставки тэга 
+        внутрь существующего HTML-документа.
+        """
+        if indent is None: # __str__ использует indent=None, поэтому если необходимо переназначить отступы - сделай это в коде до вызова __str__
             indent = self.indent
 
         attrs = []
@@ -55,6 +61,7 @@ class Tag:
         if self.is_single: # одиночный тег не содержит вложенных тегов и внутреннего текста, поэтому отображается одной строкой
             return [f'{set_offset*indent}<{self.tag}{" " + attrs if attrs else ""}/>'] # Конструкция {" " if attrs else ""} заберёт пробел в случае отсутствия аргументов        
         
+                    
         # обработчик двойных тегов
         lines = []
         lines.append(f'{set_offset*indent}<{self.tag}{" " + attrs if attrs else ""}>') # добавим строку открывающего тега с его свойствами
